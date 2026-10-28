@@ -1,0 +1,377 @@
+
+# 1. Mechanical Inspection
+
+Power OFF.
+
+Verify:
+
+☐ Elevator moves smoothly by hand
+
+☐ Cord properly tensioned
+
+☐ No snag points
+
+☐ Hard stops installed
+
+☐ Gearbox secure
+
+☐ Motor secure
+
+☐ No loose hardware
+
+☐ Full travel achievable by hand
+
+---
+
+# 2. REV Hardware Client Setup
+
+## 2.1 Connect
+
+1. Power motor with battery.
+2. Connect USB-C from laptop to SPARK MAX.
+3. Open REV Hardware Client.
+4. Click **Scan for Devices**.
+
+Verify:
+
+☐ SPARK MAX found
+
+☐ Firmware current
+
+☐ Device reports NEO Brushless connected
+
+☐ Encoder values visible
+
+If the motor shows "Brushed" or encoder data is missing, stop and investigate.
+
+---
+
+## 2.2 Assign CAN ID
+
+If this is a new controller:
+
+Example:
+
+☐ Elevator = CAN 20
+
+Set:
+
+☐ Device → CAN ID → 20
+
+Apply settings.
+
+☐ Label the controller physically.
+
+---
+
+## 2.3 Update Firmware
+
+☐ Check firmware version.
+
+If update available:
+
+☐ Update Firmware
+
+Reboot controller.
+
+☐ Rescan.
+
+☐ Verify controller reconnects successfully.
+
+---
+
+## 2.4 Factory Reset / LED Reference
+
+For a brand-new motor or reused electronics:
+
+☐ Set Factory Defaults
+
+This eliminates mystery settings left from previous seasons.
+
+### 2.4.1 Quick LED reference for a NEO:
+
+🟦🟩 Cyan Blinking = GOOD Brushless motor configured, waiting for commands
+
+🟦🟩 Cyan Solid = GOOD Brushless motor receiving commands
+
+🟧🟨 Orange/Yellow = Check CAN wiring
+
+🟧🟪 Orange/Magenta = Check encoder/sensor
+
+🟧🟦 Orange/Blue = Controller has USB but no robot battery
+
+⬜🟨 White/Yellow = Firmware update running
+
+⚫ Off = No power, recovery mode, or corrupted firmware
+
+### 2.4.2 Detailed LED reference for a NEO:
+|LED Color / Pattern|Meaning|
+|---|---|
+|🟦🟩 Cyan Blinking|Brushless mode, Brake mode, no signal|
+|🟦🟩 Cyan Solid|Brushless mode, Brake mode, valid signal|
+|🟪 Magenta Blinking|Brushless mode, Coast mode, no signal|
+|🟪 Magenta Solid|Brushless mode, Coast mode, valid signal|
+|🟩 Green Blinking|Partial forward output|
+|🟩 Green Solid|Full forward output|
+|🟥 Red Blinking|Partial reverse output|
+|🟥 Red Solid|Full reverse output|
+|🟩⬜ Green/White Blinking|Forward limit switch active|
+|🟥⬜ Red/White Blinking|Reverse limit switch active|
+|⬜🟪 White/Magenta Fast Blink|Device Identify|
+|⬜🟨 White/Yellow Blink|Firmware update in progress|
+|⬜🟦 White/Blue Blink|Firmware update retry|
+|🟧🟦 Orange/Blue Slow Blink|No 12V power (USB only)|
+|🟧🟪 Orange/Magenta Slow Blink|Sensor fault|
+|🟧🟦🟩 Orange/Cyan Slow Blink|Internal gate driver fault|
+|🟧🟨 Orange/Yellow Slow Blink|CAN communication fault|
+|⚫ Off|Recovery mode, corrupt firmware, or no power|
+---
+
+# 3. Basic Configuration
+
+On the SPARK MAX page:
+
+## 3.1 Motor Type
+
+Verify:
+
+☐ Brushless
+
+A NEO must be configured as brushless.
+
+---
+
+## 3.2 Idle Mode
+
+Set:
+
+☐ Brake
+
+Reason:
+
+An elevator should not free-fall when output goes to zero.
+
+☐ Apply configuration.
+
+---
+
+## 3.3 Current Limit
+
+Conservative starting point:
+
+☐ 40A Smart Current Limit
+
+For initial bring-up.
+
+This helps protect mechanisms during setup mistakes.
+
+---
+
+## 3.4 Ramp Rate
+
+Optional but recommended:
+
+☐ 0.25 seconds
+
+Prevents commands from shock-loading the elevator.
+
+---
+
+# 4. Encoder Verification
+
+Without commanding motion:
+
+☐ Observe encoder display.
+
+☐ Manually move elevator a few inches.
+
+Verify:
+
+☐ Position changes
+
+☐ Velocity changes
+
+☐ Record the current reading.
+
+Example:
+
+Position = 5.37 rotations
+
+If values don't change:
+
+☐ Check motor connection
+
+☐ Check controller status
+
+☐ Reboot SPARK MAX
+
+Do not continue until encoder works.
+
+---
+
+# 5. First Motor Motion
+
+Open:
+
+☐ Control Tab
+
+Select:
+
+☐ Duty Cycle Mode
+
+Set output:
+
+☐ 2%
+
+☐ Click run.
+
+Observe:
+
+- Motor direction
+- Gearbox
+- Elevator movement
+
+Stop immediately if:
+
+- Binding occurs
+- Chain jumps
+- Current spikes
+- Unusual sounds appear
+
+---
+
+# 6. Establish Elevator Direction
+
+Run:
+
+☐ +5%
+
+Desired result:
+
+☐ Elevator Up
+
+If it goes down:
+
+Use:
+
+☐ Invert Motor inside Hardware Client.
+
+☐ Retest.
+
+Standardize on:
+
+☐ Positive = Up
+
+This simplifies future code and PID tuning.
+
+---
+
+# 7. Measure Elevator Travel
+
+Keep speed between:
+
+5% and 10%
+
+☐ Slowly jog upward.
+
+Record:
+
+## 7.1 Bottom
+
+☐ Position = 0.00
+
+(or whatever reading exists)
+
+## 7.2 Top
+
+Example:
+
+Position = 82.4 rotations
+
+☐ Record this in your engineering notebook in GitHub.
+
+Future software limit:
+
+82.4 rotations
+
+---
+
+# 8. Current Monitoring
+
+While jogging:
+
+Watch:
+
+☐ Motor Current
+
+☐ Bus Voltage
+
+☐ Temperature
+
+Typical observations:
+
+|Condition|Current|
+|---|---|
+|Free movement|5-15A|
+|Moderate load|15-30A|
+|Binding|40A+|
+
+If current suddenly jumps:
+
+☐ STOP
+
+Find the mechanical issue first.
+
+---
+
+# 9. Verify Brake Mode
+
+Move elevator upward.
+
+Command:
+
+☐ 0%
+
+☐ Observe.
+
+Expected:
+
+☐ Elevator remains nearly stationary
+
+If it rapidly drops:
+
+- Verify Brake Mode applied
+- Check if the elevator is heavily overhung
+- Consider future feedforward/counterbalance
+
+---
+
+# 10. Checklist Summary
+
+□ CAN ID assigned
+
+□ Firmware updated
+
+□ Factory defaults applied
+
+□ NEO detected
+
+□ Encoder functioning
+
+□ Brake mode enabled
+
+□ Current limit set
+
+□ Elevator moves smoothly
+
+□ Positive output raises elevator
+
+□ Top position recorded
+
+□ Bottom position recorded
+
+□ No excessive current draw
+
+□ Brake mode holds elevator
+
+Only after these checks proceed to write code using VS Code. 

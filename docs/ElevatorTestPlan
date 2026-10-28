@@ -1,0 +1,295 @@
+# FRC Elevator Subsystem Technical Roadmap & Implementation Guide
+
+## 1. Team Organization & Roles
+
+To manage the mechanical and software integration of the AndyMark elevator, assign responsibilities as follows:
+
+- **Controls Lead:** Standardizes elevator requirements, soft limits, state machine logic/UML, safety thresholds, and performs initial mechanism verification.
+
+- **Mechanical Lead:** Assembles the elevator, installs and aligns sensors (limit switches, external encodersif external), verifies cord tension and structural integrity, packages and mounts the roboRIO control system, supports mechanism bring-up with the controls and software teams, maintains the mechanism throughout testing, and documents mechanical adjustments, failures, and maintenance actions.
+    
+- **Driver Interface Developer:** Implements `CommandXboxController` mappings, joystick deadbands, and driver feedback.
+    
+- **Subsystem Developer:** Writes `ElevatorSubsystem.java` using WPILib, sets up closed-loop PID control, and configures motor controllers.
+    
+- **Dashboard & Telemetry Specialist:** Configures NetworkTables outputs, AdvantageScope 2D layouts, and live tuning sliders on Glass/Elastic.
+    
+
+## 2. Elevator Requirements
+
+### Functional Requirements
+
+ **Multi-Position Targeting:** Precise movement to and holding at predefined setpoints (e.g., Stow, Low, Mid, High).
+    
+ **Manual Override:** Analog joystick control for manual micro-adjustments that overrides active setpoint commands.
+    
+ **Smooth Motion Profiles:** Define motion constraints (maximum velocity and acceleration), soft limits, and profiled PID control parameters to maintain cord tension, minimize mechanical shock, and provide reliable elevator positioning throughout the mechanism's travel.
+    
+
+### Safety Requirements
+
+ **Soft Limits:** Software-enforced maximum and minimum physical boundaries.
+    
+ **Zeroing Routine:** Automatic or switch-triggered calibration sequence upon power-up.
+    
+ **Current Protection:** Continuous current limits (e.g., 35A–40A) to prevent motor burnouts during mechanical binding or hard stops.
+    
+
+## 3. Driver Controls & Button Mappings
+
+Using `CommandXboxController` (Operator Controller):
+
+|Button / Control|Target Action|Logic / Execution|
+|---|---|---|
+|**A Button**|Move to Stow / Home Position|`onTrue()` (Setpoint Command)|
+|**B Button**|Move to Low Position|`onTrue()` (Setpoint Command)|
+|**X Button**|Move to Mid Position|`onTrue()` (Setpoint Command)|
+|**Y Button**|Move to High Position|`onTrue()` (Setpoint Command)|
+|**Left Y-Stick**|Direct Manual Speed/Voltage|Analog axis with deadband|
+|**Right Bumper**|Trigger Manual Zero Calibration|`onTrue()` + debounce|
+
+## 4. Hardware Configuration & Sensors
+
+### Sensor Choices
+    
+- **Built-in Motor Encoder:** Provides high-resolution relative position and velocity feedback for closed-loop elevator control.
+  
+- **Bottom Limit Switch:** Establishes the elevator home position during startup and provides an independent hardware safety stop.
+  
+- **Software Soft Limits:** Prevent over-travel by restricting commanded motion within the validated operating range.
+  
+### Elevator Subsystem Reference Implementation (Java)
+
+
+```java
+package frc.robot.subsystems;
+
+import edu.wpi.first.math.controller.ElevatorFeedforward;
+import edu.wpi.first.math.controller.ProfiledPIDController;
+import edu.wpi.first.math.trajectory.TrapezoidProfile;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj2.command.SubsystemBase;
+
+import com.revrobotics.CANSparkMax;
+import com.revrobotics.CANSparkMaxLowLevel.MotorType;
+import com.revrobotics.CANSparkMax.IdleMode;
+import com.revrobotics.RelativeEncoder;
+
+public class ElevatorSubsystem extends SubsystemBase {
+    
+    // TODO Task 1: Declare hardware, encoder, and controller member variables.
+    // HINT: You need a CANSparkMax, a RelativeEncoder, a ProfiledPIDController, 
+    // and an ElevatorFeedforward controller.
+    private final CANSparkMax m_motor = new CANSparkMax(ElevatorConstants.kMotorId, MotorType.kBrushless);
+    private final RelativeEncoder m_encoder;
+    private final ProfiledPIDController m_pid;
+    private final ElevatorFeedforward m_feedforward;
+
+    // Physical bounds (in meters)
+    private static final double kMinHeightMeters = 0.15; // Bottom limit
+    private static final double kMaxHeightMeters = 1.45; // Top limit
+
+    public ElevatorSubsystem() {
+        // TODO Task 2: Configure motor default settings and current protection.
+        // HINT: Reset factory defaults, set current limit to 35A, and set IdleMode to kBrake.
+        m_motor.restoreFactoryDefaults();
+        m_motor.setSmartCurrentLimit(35);
+        m_motor.setIdleMode(IdleMode.kBrake);
+
+        // TODO Task 3: Initialize the motor's built-in encoder and configure conversion factors.
+        // HINT 1: Get relative encoder using m_motor.getEncoder().
+        // HINT 2: Set Position Conversion Factor to convert motor rotations -> linear meters:
+        //         Position Factor = (Math.PI * kSpoolPitchDiameterMeters) / kGearRatio
+        // HINT 3: Set Velocity Conversion Factor to convert RPM -> meters/second:
+        //         Velocity Factor = Position Factor / 60.0
+        // HINT 4: Apply conversion factors using m_encoder.setPositionConversionFactor() 
+        //         and m_encoder.setVelocityConversionFactor().
+        m_encoder = m_motor.getEncoder();
+
+        // TODO Task 4: Instantiate ProfiledPIDController with TrapezoidProfile constraints.
+        // HINT: Constraints require max velocity and max acceleration from ElevatorConstants.
+        m_pid = new ProfiledPIDController(
+            ElevatorConstants.kP, ElevatorConstants.kI, ElevatorConstants.kD,
+            new TrapezoidProfile.Constraints(ElevatorConstants.kMaxVel, ElevatorConstants.kMaxAccel)
+        );
+
+        // TODO Task 5: Instantiate ElevatorFeedforward controller.
+        // HINT: Requires kS, kG, kV, and kA constants.
+        m_feedforward = new ElevatorFeedforward(
+            ElevatorConstants.kS, ElevatorConstants.kG, ElevatorConstants.kV, ElevatorConstants.kA
+        );
+    }
+
+    /**
+     * Reads current height directly from the motor encoder.
+     * @return Current elevator height in meters.
+     */
+    public double getDistanceMeters() {
+        // TODO Task 6: Return position from m_encoder.
+        // HINT: Since position conversion factor is set, m_encoder.getPosition() returns meters directly.
+        return 0.0; // Placeholder
+    }
+
+    /**
+     * Resets the encoder position to a known reference height (e.g., when home limit switch trips).
+     * @param positionMeters Known position to set the encoder to.
+     */
+    public void resetEncoder(double positionMeters) {
+        // TODO Task 7: Zero or calibrate the relative encoder.
+        // HINT: Call m_encoder.setPosition(positionMeters).
+    }
+
+    @Override
+    public void periodic() {
+        // TODO Task 8: Post telemetry to SmartDashboard.
+        // HINT: Post "Elevator/PositionMeters" (getDistanceMeters()), "Elevator/VelocityMetersPerSec" (m_encoder.getVelocity()),
+        // "Elevator/AppliedOutputVolts" (m_motor.getAppliedOutput() * m_motor.getBusVoltage()), and "Elevator/CurrentAmps" (m_motor.getOutputCurrent()).
+    }
+
+    /**
+     * Drives the elevator towards a target setpoint while adhering to safety limits.
+     * @param goalMeters Target elevator position in meters.
+     */
+    public void setGoal(double goalMeters) {
+        double currentPos = getDistanceMeters();
+        
+        // TODO Task 9: Implement software limit switch check.
+        // HINT: If (goalMeters <= kMinHeightMeters AND currentPos <= kMinHeightMeters) OR
+        //          (goalMeters >= kMaxHeightMeters AND currentPos >= kMaxHeightMeters),
+        // stop the motor (0.0 volts) and return early.
+
+        // TODO Task 10: Calculate closed-loop control outputs.
+        // HINT 1: Calculate feedforward voltage for velocity setpoint: m_pid.getSetpoint().velocity
+        // HINT 2: Calculate PID output using current position and target goalMeters.
+        // HINT 3: Apply total sum voltage (PID + Feedforward) to m_motor.
+    }
+}
+}
+```
+
+
+## 5. Telemetry & Tuning Parameters
+
+Publish these items to NetworkTables for live adjustment on Glass/Elastic and plotting in AdvantageScope:
+
+### Tunable Parameters (Adjustable in Glass/Elastic)
+
+These parameters should be exposed as sliders during elevator tuning.
+
+| Parameter | Widget | Purpose |
+|-----------|---------|---------|
+| kP | Slider | Position control gain |
+| Feedforward kS | Slider | Static friction compensation |
+| Feedforward kG | Slider | Gravity compensation |
+| Max Velocity | Slider | Maximum elevator velocity |
+| Max Acceleration | Slider | Maximum elevator acceleration |
+| Position Tolerance | Slider | Allowed position error before reporting "At Setpoint" |
+| Upper Soft Limit | Slider | Maximum elevator travel |
+| Lower Soft Limit | Slider | Minimum elevator travel |
+
+### Preset Positions
+
+| Parameter | Widget | Purpose |
+|-----------|---------|---------|
+| Stow Height | Number Input | Elevator stowed position |
+| Intake Height | Number Input | Elevator intake position |
+| L1 Height | Number Input | Level 1 scoring position |
+| L2 Height | Number Input | Level 2 scoring position |
+| L3 Height | Number Input | Level 3 scoring position |
+| L4 Height | Number Input | Level 4 scoring position (if applicable) |
+
+### Telemetry (Display Only)
+
+These values should always be visible to drivers, programmers, and controls engineers.
+
+| Telemetry Item | Widget | Purpose |
+|---------------|---------|---------|
+| Current Elevator Position | Numeric Display | Measured elevator position |
+| Target Position | Numeric Display | Commanded elevator position |
+| Position Error | Numeric Display | Difference between target and actual position |
+| Current Elevator Velocity | Numeric Display | Measured elevator speed |
+| Motor Output (%) | Gauge | Applied motor output |
+| Motor Current (A) | Gauge | Motor current draw |
+| Motor Temperature (°C) | Numeric Display | Motor temperature |
+| Bottom Limit Switch | Boolean Box | Home switch status |
+| Elevator Homed | Boolean Box | Elevator has been zeroed |
+| At Setpoint | Boolean Box | Elevator is within tolerance |
+| Elevator State | Text Display | STOW, INTAKE, L1, L2, L3, etc. |
+
+### Mechanical Health Monitoring
+
+These diagnostics help identify issues with the cord-driven elevator.
+
+| Diagnostic | Widget | Purpose |
+|-----------|---------|---------|
+| Motor Current | Gauge | Detects excessive loading or binding |
+| Position Error | Numeric Display | Detects inability to reach commanded position |
+| Velocity Error | Numeric Display | Detects motion-profile tracking issues |
+| Soft Limit Active | Boolean Box | Indicates software travel limits are engaged |
+| Limit Switch Active | Boolean Box | Indicates home switch activation |
+
+### Warning Indicators
+
+Monitor these values during testing.
+
+| Symptom | Possible Cause |
+|----------|---------------|
+| High Motor Current + Increasing Position Error | Cord stretching |
+| High Motor Current + Low Velocity | Carriage binding |
+| Oscillating Position Error | kP too high or mechanical backlash |
+| Large Velocity Error | Motion constraints too aggressive |
+| Unexpected Limit Switch Activation | Sensor alignment issue |
+| Elevator Stalls Below Setpoint | Insufficient kS or excessive friction |
+| Elevator Slowly Drifts Downward | Insufficient kG compensation |
+| Sudden Current Spikes | Pulley damage, misalignment, or obstruction |
+
+### Recommended Driver/Programmer Dashboard
+
+### Controls Section
+
+- kP Slider
+- kS Slider
+- kG Slider
+- Max Velocity Slider
+- Max Acceleration Slider
+
+### Position Section
+
+- Current Elevator Position
+- Target Position
+- Position Error
+- Elevator State
+
+### Health Section
+
+- Motor Current Gauge
+- Motor Temperature
+- Elevator Homed
+- Bottom Limit Switch
+- At Setpoint
+
+### Diagnostics Section
+
+- Velocity Error
+- Soft Limit Active
+- Limit Switch Active
+- Motor Output (%)
+
+## 6. AdvantageScope 2D Visualization
+
+### 1. Code Implementation (`Mechanism2d`)
+
+```
+private final Mechanism2d m_mech = new Mechanism2d(1.0, 2.0);
+private final MechanismRoot2d m_root = m_mech.getRoot("ElevatorRoot", 0.5, 0.1);
+private final MechanismLigament2d m_fixedFrame = 
+    m_root.append(new MechanismLigament2d("Fixed Frame", 1.5, 90, 6, new Color8Bit(Color.kGray)));
+private final MechanismLigament2d m_carriage = 
+    m_root.append(new MechanismLigament2d("Carriage", 0.1, 90, 10, new Color8Bit(Color.kRed)));
+
+@Override
+public void periodic() {
+    m_carriage.setLength(getDistanceMeters());
+    SmartDashboard.putData("Elevator/Mechanism2D", m_mech);
+}
+```
